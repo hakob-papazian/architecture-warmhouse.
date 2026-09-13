@@ -1,0 +1,24 @@
+@startuml Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма контекста системы — Smart Home (as-is, монолит)
+
+Person(homeowner, "Пользователь (владелец дома)", "Просматривает температуру в своих домах и удалённо включает/выключает отопление через веб-интерфейс")
+
+System(monolith, "Smart Home Monolith", "Go + Gin, монолитное приложение. Хранит датчики и дома, отдаёт REST API, управляет отоплением")
+
+SystemDb_Ext(postgres, "PostgreSQL", "Хранит данные о датчиках, домах и пользователях")
+
+System_Ext(tempApi, "Temperature Sensors API", "Внешний источник показаний физических датчиков температуры (симулятор датчиков)")
+
+System_Ext(heating, "Оборудование отопления", "Котёл/контроллер отопления в доме пользователя, принимает команды вкл/выкл")
+
+Rel(homeowner, monolith, "Просматривает температуру, включает/выключает отопление", "HTTPS / REST, JSON")
+Rel(monolith, postgres, "Читает и пишет данные", "SQL / TCP")
+Rel(monolith, tempApi, "Запрашивает текущие показания температуры", "HTTPS / REST, JSON")
+Rel(monolith, heating, "Отправляет команды включения/выключения", "HTTP / протокол оборудования")
+Rel(heating, monolith, "Подтверждает состояние", "HTTP / протокол оборудования")
+
+@enduml
