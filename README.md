@@ -234,4 +234,61 @@ Locations - название комнаты, sensorId - идентификато
 
 **Реализация.** `temperature-api` реализован как ASP.NET Core Minimal API (`apps/temperature-api-dotnet`) — `GET /temperature?location=` и `GET /temperature/{sensorId}` возвращают случайное значение (15–30°C) при каждом вызове, с той же логикой определения location/sensorId по умолчанию, что приведена в задании. `docker-compose.yml` в `apps/` дополнен: `postgres` (с `POSTGRES_USER`/`POSTGRES_PASSWORD`, healthcheck и монтированием `./smart_home/init.sql` в `/docker-entrypoint-initdb.d/`, при этом `POSTGRES_DB` намеренно не задан — иначе `CREATE DATABASE smarthome` внутри `init.sql` конфликтует с уже созданной БД), новый сервис `temperature-api` (порт 8081) и сервис `app`, теперь собираемый из `./smart_home-dotnet` (см. пояснение про выбор .NET-реализации монолита вместо исходной Go-версии — обсуждалось в чате). Проверено локально (`dotnet build`/`dotnet run` для обоих .NET-проектов, `docker compose config` для синтаксиса compose-файла); живой прогон `docker-compose up` в этой сессии не получилось выполнить — Docker Desktop не поднялся в среде, поэтому итоговая проверка через Postman-коллекцию (`Create Sensor`, `Get All Sensors`) осталась за пользователем.
 
+---
+
+# Дополнительно: реализация To-Be микросервисной архитектуры (не требуется заданием)
+
+Задание 2 требует только диаграммы C4 (см. текст задания выше — «нужно предоставить только диаграммы»). По отдельной просьбе в чате спроектированная в Задании 2 архитектура была также реализована как реально работающий код — сверх того, что нужно для сдачи проекта. Это отдельный, самостоятельный стек: он **не заменяет и не трогает** `apps/docker-compose.yml`/`apps/smart_home-dotnet`/`apps/temperature-api-dotnet`, за счёт которых сдаётся Задание 5.
+
+## Расположение и состав
+
+Всё находится в `apps/microservices/` (`SmartHome.Microservices.slnx`):
+
+| Сервис | Проект | Роль |
+|---|---|---|
+| API Gateway | `ApiGateway` (YARP) | Единая точка входа, маршрутизация по `/api/**`, проверка JWT |
+| User & Home Service | `UserHomeService` | Регистрация/логин (выдаёт JWT), CRUD домов |
+| Device Management Service | `DeviceManagementService` | CRUD устройств, проверка принадлежности дома через User & Home Service |
+| Temperature Monitoring Service | `TemperatureMonitoringService` | Фоновый опрос `temperature-sensors-api`, хранение показаний, публикация `TemperatureUpdated` |
+| Heating Control Service | `HeatingControlService` | Профиль/команды отопления, автоматика по `TemperatureUpdated`, публикация `HeatingStateChanged` |
+| Notification Service | `NotificationService` | Подписка на оба события, лог уведомлений пользователю |
+| `Smarthome.Shared` | библиотека | Контракты событий + обёртка над `RabbitMQ.Client`, общие JWT-настройки |
+| `HeatingControlService.Tests` | xUnit | Тесты доменной логики автоматики отопления (5 тестов, см. ниже) |
+
+Брокер — RabbitMQ (топик-обмен `smarthome.events`, ключи маршрутизации те же, что в `docs/api/heating-events-asyncapi.yaml`). База — один контейнер PostgreSQL с пятью отдельными базами (`postgres-init.sql`), по одной на сервис — database-per-service соблюдён на уровне подключений, даже если физически это один инстанс Postgres. Симулятор датчиков переиспользует **тот же** проект `apps/temperature-api-dotnet` из Задания 5 (свой отдельный контейнер в этом стеке, порт 8091).
+
+## Как запустить и проверить
+
+```bash
+cd apps/microservices
+docker compose up --build
+```
+
+Порты: Gateway `8090`, User&Home `8092`, Device Management `8093`, Temperature Monitoring `8094`, Heating Control `8095`, Notification `8096`, temperature-sensors-api `8091`, RabbitMQ management UI `15672` (guest/guest).
+
+Демонстрационный сценарий через Gateway (`http://localhost:8090/api/...`):
+
+1. `POST /api/auth/register` `{name, email, password}`
+2. `POST /api/auth/login` → получить `token`
+3. `POST /api/homes` (Bearer token) `{name, address}` → получить `houseId`
+4. `POST /api/devices` (Bearer token) `{houseId, typeName: "temperature_sensor", serialNumber, name, location}` → получить `deviceId`
+5. `POST /api/houses/{houseId}/temperature/watches` (Bearer token) `{sensorId: "1", deviceId}` — регистрирует датчик для опроса
+6. Подождать ~15 сек (интервал опроса) → `GET /api/houses/{houseId}/temperature` покажет показание, а `GET /api/houses/{houseId}/heating` — что автоматика при необходимости включила отопление
+7. `GET /api/users/{userId}/notifications` — если показание было аномальным или отопление переключилось, здесь появится запись
+
+## Что проверено, а что нет
+
+- ✅ Все 7 проектов собираются вместе (`dotnet build` на решении).
+- ✅ `dotnet test` — 5/5 тестов домена автоматики отопления (`HeatingProfile.DecideAutoAction`) проходят.
+- ✅ `docker compose config` — синтаксис и итоговая конфигурация compose-файла корректны.
+- ❌ Живой прогон `docker compose up` в этой сессии не выполнен. Причина найдена: на этой машине не установлен WSL2 (`wsl --status` → «The Windows Subsystem for Linux is not installed»), без которого движок Docker Desktop на Windows не поднимается вообще (отсюда стабильный `500 Internal Server Error` на всех попытках). Исправление — `wsl --install` и перезагрузка; это системное изменение, поэтому оно не выполнялось без вашего решения.
+
+## Осознанные упрощения относительно диаграмм Задания 2
+
+- Общий symmetric JWT-ключ передаётся как обычная переменная окружения с dev-значением по умолчанию — для реального окружения его нужно заменить и хранить как секрет.
+- Сущность `Module` из ER-диаграммы не реализована (только `DeviceType`/`Device`) — не требовалась ни одним из построенных сценариев.
+- Проверка прав доступа к дому в Device Management Service выполняется только на создании устройства, не на чтении (осознанное упрощение, чтобы не проверять авторизацию на каждом read-эндпоинте).
+- «Оборудование отопления» и канал уведомлений (Email/Push) — симулированы (лог + короткая задержка), так как реальных внешних систем для них нет.
+- Temperature Monitoring Service узнаёт, какие датчики опрашивать, через явную регистрацию (`POST .../temperature/watches`), а не через синхронный вызов Device Management Service — такой связи не было на диаграмме контейнеров Задания 2, поэтому её не стали добавлять неявно.
+
 

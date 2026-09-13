@@ -1,0 +1,10 @@
+<Solution>
+  <Project Path="ApiGateway/ApiGateway.csproj" />
+  <Project Path="DeviceManagementService/DeviceManagementService.csproj" />
+  <Project Path="HeatingControlService.Tests/HeatingControlService.Tests.csproj" />
+  <Project Path="HeatingControlService/HeatingControlService.csproj" />
+  <Project Path="NotificationService/NotificationService.csproj" />
+  <Project Path="Smarthome.Shared/Smarthome.Shared.csproj" />
+  <Project Path="TemperatureMonitoringService/TemperatureMonitoringService.csproj" />
+  <Project Path="UserHomeService/UserHomeService.csproj" />
+</Solution>
