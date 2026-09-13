@@ -232,4 +232,6 @@ Locations - название комнаты, sensorId - идентификато
 
 Ревьюер будет проверять точно так же.
 
+**Реализация.** `temperature-api` реализован как ASP.NET Core Minimal API (`apps/temperature-api-dotnet`) — `GET /temperature?location=` и `GET /temperature/{sensorId}` возвращают случайное значение (15–30°C) при каждом вызове, с той же логикой определения location/sensorId по умолчанию, что приведена в задании. `docker-compose.yml` в `apps/` дополнен: `postgres` (с `POSTGRES_USER`/`POSTGRES_PASSWORD`, healthcheck и монтированием `./smart_home/init.sql` в `/docker-entrypoint-initdb.d/`, при этом `POSTGRES_DB` намеренно не задан — иначе `CREATE DATABASE smarthome` внутри `init.sql` конфликтует с уже созданной БД), новый сервис `temperature-api` (порт 8081) и сервис `app`, теперь собираемый из `./smart_home-dotnet` (см. пояснение про выбор .NET-реализации монолита вместо исходной Go-версии — обсуждалось в чате). Проверено локально (`dotnet build`/`dotnet run` для обоих .NET-проектов, `docker compose config` для синтаксиса compose-файла); живой прогон `docker-compose up` в этой сессии не получилось выполнить — Docker Desktop не поднялся в среде, поэтому итоговая проверка через Postman-коллекцию (`Create Sensor`, `Get All Sensors`) осталась за пользователем.
+
 
