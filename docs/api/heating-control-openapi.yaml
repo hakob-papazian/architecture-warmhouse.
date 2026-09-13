@@ -1,0 +1,360 @@
+openapi: 3.0.3
+info:
+  title: Heating Control Service API
+  description: >
+    REST API микросервиса управления отоплением. Позволяет получить текущее
+    состояние отопления дома, изменить целевую температуру и режим,
+    отправить ручную команду вкл/выкл, а также получить историю команд.
+  version: "1.0.0"
+  contact:
+    name: Smart Home Team
+  license:
+    name: MIT
+servers:
+  - url: https://api.smarthome.internal/heating/v1
+    description: Через API Gateway
+  - url: http://heating-control-service:8080/v1
+    description: Внутри кластера (сервис-сервис)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: HeatingProfile
+    description: Текущее состояние и настройки отопления дома
+  - name: HeatingCommand
+    description: Ручные команды и история их выполнения
+
+paths:
+  /houses/{houseId}/heating:
+    get:
+      tags: [HeatingProfile]
+      summary: Получить текущее состояние отопления дома
+      operationId: getHeatingProfile
+      parameters:
+        - $ref: '#/components/parameters/HouseId'
+      responses:
+        '200':
+          description: Текущий профиль отопления
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatingProfile'
+              examples:
+                default:
+                  value:
+                    houseId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    mode: auto
+                    targetTemperature: 21.5
+                    currentState: "on"
+                    updatedAt: "2026-09-13T10:15:00Z"
+        '404':
+          $ref: '#/components/responses/HouseNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /houses/{houseId}/heating/target-temperature:
+    patch:
+      tags: [HeatingProfile]
+      summary: Изменить целевую температуру
+      operationId: updateTargetTemperature
+      parameters:
+        - $ref: '#/components/parameters/HouseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetTemperature]
+              properties:
+                targetTemperature:
+                  type: number
+                  format: float
+                  minimum: 5
+                  maximum: 30
+                  example: 22.0
+            examples:
+              default:
+                value:
+                  targetTemperature: 22.0
+      responses:
+        '200':
+          description: Целевая температура обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatingProfile'
+              examples:
+                default:
+                  value:
+                    houseId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    mode: auto
+                    targetTemperature: 22.0
+                    currentState: "on"
+                    updatedAt: "2026-09-13T10:20:00Z"
+        '400':
+          description: Некорректное значение температуры
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                default:
+                  value:
+                    error: validation_error
+                    message: "targetTemperature must be between 5 and 30"
+        '404':
+          $ref: '#/components/responses/HouseNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /houses/{houseId}/heating/mode:
+    patch:
+      tags: [HeatingProfile]
+      summary: Переключить режим отопления (ручной/автоматический)
+      operationId: updateHeatingMode
+      parameters:
+        - $ref: '#/components/parameters/HouseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  type: string
+                  enum: [manual, auto]
+            examples:
+              default:
+                value:
+                  mode: manual
+      responses:
+        '200':
+          description: Режим обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatingProfile'
+        '400':
+          description: Недопустимое значение режима
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/HouseNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /houses/{houseId}/heating/commands:
+    post:
+      tags: [HeatingCommand]
+      summary: Отправить ручную команду на включение/выключение отопления
+      operationId: sendHeatingCommand
+      parameters:
+        - $ref: '#/components/parameters/HouseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [on, off]
+            examples:
+              default:
+                value:
+                  action: "on"
+      responses:
+        '201':
+          description: Команда принята и подтверждена оборудованием
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HeatingCommand'
+              examples:
+                default:
+                  value:
+                    id: "b3b3f8b0-9f0a-4e9a-9c1a-1c2f3a4b5c6d"
+                    houseId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                    action: "on"
+                    source: manual
+                    issuedAt: "2026-09-13T10:25:00Z"
+                    confirmed: true
+        '400':
+          description: Некорректное значение action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/HouseNotFound'
+        '409':
+          description: Команда конфликтует с текущим состоянием или режимом (например, дом в режиме auto)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                default:
+                  value:
+                    error: conflict
+                    message: "House is in auto mode; switch to manual before sending manual commands"
+        '502':
+          description: Оборудование отопления не ответило на команду
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                default:
+                  value:
+                    error: equipment_unreachable
+                    message: "Heating equipment did not acknowledge the command"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      tags: [HeatingCommand]
+      summary: Получить историю команд отопления по дому
+      operationId: listHeatingCommands
+      parameters:
+        - $ref: '#/components/parameters/HouseId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Страница истории команд
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HeatingCommand'
+                  nextCursor:
+                    type: string
+                    nullable: true
+              examples:
+                default:
+                  value:
+                    items:
+                      - id: "b3b3f8b0-9f0a-4e9a-9c1a-1c2f3a4b5c6d"
+                        houseId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                        action: "on"
+                        source: manual
+                        issuedAt: "2026-09-13T10:25:00Z"
+                        confirmed: true
+                    nextCursor: null
+        '404':
+          $ref: '#/components/responses/HouseNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        JWT, выданный User & Home Service, проверяется на уровне API
+        Gateway; downstream-сервисы доверяют переданному user-контексту.
+
+  parameters:
+    HouseId:
+      name: houseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    HouseNotFound:
+      description: Дом с указанным houseId не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            default:
+              value:
+                error: not_found
+                message: "House 3fa85f64-5717-4562-b3fc-2c963f66afa6 not found"
+    InternalError:
+      description: Внутренняя ошибка сервиса
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            default:
+              value:
+                error: internal_error
+                message: "Unexpected error, please retry later"
+
+  schemas:
+    HeatingProfile:
+      type: object
+      properties:
+        houseId:
+          type: string
+          format: uuid
+        mode:
+          type: string
+          enum: [manual, auto]
+        targetTemperature:
+          type: number
+          format: float
+        currentState:
+          type: string
+          enum: [on, off]
+        updatedAt:
+          type: string
+          format: date-time
+
+    HeatingCommand:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        houseId:
+          type: string
+          format: uuid
+        action:
+          type: string
+          enum: [on, off]
+        source:
+          type: string
+          enum: [manual, auto]
+        issuedAt:
+          type: string
+          format: date-time
+        confirmed:
+          type: boolean
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string

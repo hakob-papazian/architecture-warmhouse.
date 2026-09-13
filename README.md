@@ -149,11 +149,33 @@
 
 ### 1. Тип API
 
-Укажите, какой тип API вы будете использовать для взаимодействия микросервисов. Объясните своё решение.
+Используются оба типа, для разных видов взаимодействия — это прямое следствие диаграммы контейнеров (Задание 2):
+
+- **REST (синхронный).** Клиент (веб-приложение через API Gateway) и сервисы, которым нужен немедленный ответ (например, проверка принадлежности дома пользователю), используют REST/JSON. Задокументирован через OpenAPI.
+- **AsyncAPI (асинхронный).** Обмен телеметрией и статусами через RabbitMQ не требует немедленного ответа: `Temperature Monitoring Service` публикует показание, а `Heating Control Service`/`Notification Service` реагируют независимо и в своём темпе. Синхронный вызов здесь создал бы ненужную связанность и точку отказа (см. проблему «синхронная зависимость» в Задании 1).
+
+Для документации выбран **Heating Control Service** — самый критичный сервис системы (см. диаграммы кода в Задании 2): он одновременно имеет синхронное REST-API для клиента и асинхронные события для автоматики/уведомлений, поэтому хорошо показывает оба подхода на одном примере.
 
 ### 2. Документация API
 
-Здесь приложите ссылки на документацию API для микросервисов, которые вы спроектировали в первой части проектной работы. Для документирования используйте Swagger/OpenAPI или AsyncAPI.
+**REST API — OpenAPI 3.0.** Исходник: [`docs/api/heating-control-openapi.yaml`](docs/api/heating-control-openapi.yaml) (провалидирован `@redocly/cli lint`; открывается в Swagger Editor через File → Import). 5 эндпоинтов:
+
+| Метод | Путь | Назначение |
+|---|---|---|
+| GET | `/houses/{houseId}/heating` | Получить текущее состояние отопления дома |
+| PATCH | `/houses/{houseId}/heating/target-temperature` | Изменить целевую температуру |
+| PATCH | `/houses/{houseId}/heating/mode` | Переключить режим (manual/auto) |
+| POST | `/houses/{houseId}/heating/commands` | Отправить ручную команду вкл/выкл (аналог «отправки команды устройству») |
+| GET | `/houses/{houseId}/heating/commands` | История команд отопления |
+
+Для каждого эндпойнта в спецификации описаны схема запроса/ответа, коды `200/201/400/404/409/502/500` и примеры (`examples`) — подробности см. в самом файле.
+
+**Асинхронные события — AsyncAPI 2.6.** Исходник: [`docs/api/heating-events-asyncapi.yaml`](docs/api/heating-events-asyncapi.yaml) (провалидирован `@asyncapi/cli validate`; открывается в AsyncAPI Studio). Описаны 2 канала RabbitMQ:
+
+| Канал | Publisher | Subscriber(s) | Сообщение |
+|---|---|---|---|
+| `smarthome.temperature.updated` | Temperature Monitoring Service | Heating Control Service, Notification Service | `TemperatureUpdated` |
+| `smarthome.heating.state-changed` | Heating Control Service | Notification Service | `HeatingStateChanged` |
 
 # Задание 5. Работа с docker и docker-compose
 
