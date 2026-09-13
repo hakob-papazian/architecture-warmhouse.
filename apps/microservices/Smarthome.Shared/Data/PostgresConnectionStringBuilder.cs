@@ -3,8 +3,7 @@ namespace Smarthome.Shared.Data;
 public static class PostgresConnectionStringBuilder
 {
     // Converts a "postgres://user:pass@host:port/dbname" URL into an Npgsql
-    // connection string. Mirrors SmartHome.Api.Data.PostgresConnectionStringBuilder
-    // (apps/smart_home-dotnet) so DATABASE_URL has the same shape everywhere.
+    // connection string.
     public static string FromUrl(string url)
     {
         var uri = new Uri(url);
