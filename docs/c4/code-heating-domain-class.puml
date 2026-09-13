@@ -1,0 +1,66 @@
+@startuml Code_HeatingDomainClass
+title Код: доменная модель Heating Control Service
+
+enum HeatingMode {
+  Manual
+  Auto
+}
+
+enum HeatingState {
+  On
+  Off
+}
+
+class HomeHeatingProfile {
+  +HomeId : Guid
+  +Mode : HeatingMode
+  +TargetTemperature : decimal
+  +CurrentState : HeatingState
+  +LastChangedAt : DateTime
+  +Apply(reading: TemperatureReading) : HeatingCommand?
+}
+
+class TemperatureReading {
+  +HomeId : Guid
+  +SensorId : Guid
+  +Value : decimal
+  +Timestamp : DateTime
+}
+
+class HeatingCommand {
+  +HomeId : Guid
+  +Action : HeatingState
+  +IssuedAt : DateTime
+  +Confirmed : bool
+}
+
+interface IHeatingEquipmentClient {
+  +Send(command: HeatingCommand) : bool
+}
+
+interface IHeatingRepository {
+  +GetByHomeId(homeId: Guid) : HomeHeatingProfile
+  +Save(profile: HomeHeatingProfile) : void
+}
+
+class HeatingCommandDispatcher {
+  -repository : IHeatingRepository
+  -equipmentClient : IHeatingEquipmentClient
+  -eventPublisher : IEventPublisher
+  +Dispatch(homeId: Guid, action: HeatingState) : void
+}
+
+interface IEventPublisher {
+  +Publish(event: object) : void
+}
+
+HomeHeatingProfile "1" --> "0..1" HeatingCommand : порождает
+HomeHeatingProfile --> HeatingMode
+HomeHeatingProfile --> HeatingState
+HeatingCommandDispatcher --> IHeatingRepository
+HeatingCommandDispatcher --> IHeatingEquipmentClient
+HeatingCommandDispatcher --> IEventPublisher
+HeatingCommandDispatcher ..> HeatingCommand : создаёт
+IHeatingRepository ..> HomeHeatingProfile
+
+@enduml

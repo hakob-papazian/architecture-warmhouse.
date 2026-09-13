@@ -1,0 +1,26 @@
+@startuml Component_DeviceManagement
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма компонентов — Device Management Service
+
+Container(gateway, "API Gateway", "REST")
+Container(userSvc, "User & Home Service", "REST")
+ContainerDb(deviceDb, "Device DB", "PostgreSQL")
+
+Container_Boundary(deviceSvc, "Device Management Service") {
+  Component(api, "API", "REST controller", "Эндпоинты CRUD датчиков/устройств")
+  Component(commandHandler, "Command Handler", "application service", "Обрабатывает команды CreateDevice/UpdateDevice/DeleteDevice")
+  Component(stateManager, "Device State Manager", "domain service", "Валидирует и хранит состояние устройства (активно/неактивно, конфигурация)")
+  Component(repository, "Device Repository", "EF Core / Data Access", "Доступ к таблице devices")
+}
+
+Rel(gateway, api, "CRUD датчиков", "REST / JSON")
+Rel(api, commandHandler, "Передаёт команду")
+Rel(commandHandler, userSvc, "Проверяет принадлежность дома пользователю", "REST / JSON")
+Rel(commandHandler, stateManager, "Валидирует и применяет изменение состояния")
+Rel(stateManager, repository, "Читает/пишет устройство")
+Rel(repository, deviceDb, "SQL", "SQL / TCP")
+
+@enduml

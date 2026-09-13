@@ -1,0 +1,32 @@
+@startuml Component_TemperatureMonitoring
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма компонентов — Temperature Monitoring Service
+
+Container(gateway, "API Gateway", "REST")
+ContainerQueue(broker, "Message Broker", "RabbitMQ")
+ContainerDb(tempDb, "Temperature DB", "PostgreSQL")
+System_Ext(tempApi, "Temperature Sensors API", "Внешний источник показаний")
+
+Container_Boundary(tempSvc, "Temperature Monitoring Service") {
+  Component(api, "API", "REST controller", "Отдаёт текущую и историческую температуру")
+  Component(poller, "Sensor Poller", "background worker", "Периодически опрашивает Temperature Sensors API по каждому датчику")
+  Component(readingProcessor, "Reading Processor", "domain service", "Валидирует показание, сохраняет, решает о публикации события")
+  Component(eventPublisher, "Event Publisher", "messaging", "Публикует TemperatureUpdated в брокер")
+  Component(repository, "Reading Repository", "EF Core / Data Access", "Доступ к истории показаний")
+}
+
+Rel(gateway, api, "Текущая/историческая температура", "REST / JSON")
+Rel(api, repository, "Читает историю")
+
+Rel(poller, tempApi, "Запрашивает показания", "HTTPS / REST, JSON")
+Rel(poller, readingProcessor, "Передаёт новое показание")
+Rel(readingProcessor, repository, "Сохраняет показание")
+Rel(readingProcessor, eventPublisher, "Инициирует публикацию")
+Rel(eventPublisher, broker, "TemperatureUpdated", "AMQP")
+
+Rel(repository, tempDb, "SQL", "SQL / TCP")
+
+@enduml

@@ -1,0 +1,27 @@
+@startuml Component_Notification
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма компонентов — Notification Service
+
+ContainerQueue(broker, "Message Broker", "RabbitMQ")
+ContainerDb(notifDb, "Notification DB", "PostgreSQL")
+System_Ext(notifyChannel, "Email / Push провайдер", "Внешний канал доставки")
+
+Container_Boundary(notifSvc, "Notification Service") {
+  Component(eventConsumer, "Event Consumer", "messaging", "Подписан на TemperatureUpdated и HeatingStateChanged")
+  Component(rulesEngine, "Notification Rules Engine", "domain service", "Решает, нужно ли уведомление (аномальная температура, смена состояния отопления) и для какого пользователя")
+  Component(deliveryService, "Delivery Service", "application service", "Формирует и отправляет сообщение через внешний канал")
+  Component(repository, "Notification Repository", "EF Core / Data Access", "Настройки уведомлений пользователя и история отправок")
+}
+
+Rel(broker, eventConsumer, "TemperatureUpdated, HeatingStateChanged", "AMQP")
+Rel(eventConsumer, rulesEngine, "Передаёт событие")
+Rel(rulesEngine, repository, "Читает настройки пользователя")
+Rel(rulesEngine, deliveryService, "Инициирует отправку")
+Rel(deliveryService, notifyChannel, "Отправляет уведомление", "HTTPS / SMTP")
+Rel(deliveryService, repository, "Сохраняет историю отправки")
+Rel(repository, notifDb, "SQL", "SQL / TCP")
+
+@enduml

@@ -83,15 +83,51 @@
 
 **Диаграмма контейнеров (Containers)**
 
-Добавьте диаграмму.
+Декомпозиция: `API Gateway`, `User & Home Service`, `Device Management Service`, `Temperature Monitoring Service`, `Heating Control Service`, `Notification Service` (новый сервис, не следует напрямую из доменов Задания 1, но нужен для оповещения пользователей — бизнес-требование). У каждого сервиса — своя база PostgreSQL (database per service). Асинхронное взаимодействие (события `TemperatureUpdated`, `HeatingStateChanged`) идёт через `Message Broker` (RabbitMQ) — на нём построена автоматика отопления и уведомления; клиентские запросы обслуживаются синхронно через `API Gateway` (REST/JSON).
+
+Исходник: [`docs/c4/container.puml`](docs/c4/container.puml).
+
+![Диаграмма контейнеров Smart Home](docs/c4/container.png)
 
 **Диаграмма компонентов (Components)**
 
-Добавьте диаграмму для каждого из выделенных микросервисов.
+По одной диаграмме на каждый выделенный микросервис.
+
+- API Gateway — [`docs/c4/component-api-gateway.puml`](docs/c4/component-api-gateway.puml)
+
+  ![Компоненты API Gateway](docs/c4/component-api-gateway.png)
+
+- User & Home Service — [`docs/c4/component-user-home.puml`](docs/c4/component-user-home.puml)
+
+  ![Компоненты User & Home Service](docs/c4/component-user-home.png)
+
+- Device Management Service — [`docs/c4/component-device-management.puml`](docs/c4/component-device-management.puml)
+
+  ![Компоненты Device Management Service](docs/c4/component-device-management.png)
+
+- Temperature Monitoring Service — [`docs/c4/component-temperature-monitoring.puml`](docs/c4/component-temperature-monitoring.puml)
+
+  ![Компоненты Temperature Monitoring Service](docs/c4/component-temperature-monitoring.png)
+
+- Heating Control Service — [`docs/c4/component-heating-control.puml`](docs/c4/component-heating-control.puml)
+
+  ![Компоненты Heating Control Service](docs/c4/component-heating-control.png)
+
+- Notification Service — [`docs/c4/component-notification.puml`](docs/c4/component-notification.puml)
+
+  ![Компоненты Notification Service](docs/c4/component-notification.png)
 
 **Диаграмма кода (Code)**
 
-Добавьте одну диаграмму или несколько.
+Самая критичная часть системы — автоматическое управление отоплением по показаниям температуры (Heating Control Service): она затрагивает реальное оборудование, работает асинхронно через брокер сообщений и должна быть идемпотентной/предсказуемой.
+
+Диаграмма последовательности — [`docs/c4/code-heating-automation-sequence.puml`](docs/c4/code-heating-automation-sequence.puml):
+
+![Последовательность автоматического управления отоплением](docs/c4/code-heating-automation-sequence.png)
+
+Диаграмма классов доменной модели — [`docs/c4/code-heating-domain-class.puml`](docs/c4/code-heating-domain-class.puml):
+
+![Доменная модель Heating Control Service](docs/c4/code-heating-domain-class.png)
 
 # Задание 3. Разработка ER-диаграммы
 
