@@ -1,0 +1,126 @@
+@startuml ER
+title ER-диаграмма — логическая модель данных Smart Home (To-Be)
+
+skinparam linetype polyline
+skinparam nodesep 40
+skinparam ranksep 60
+
+package "User & Home Service" {
+  entity "User" as user {
+    * id : UUID <<PK>>
+    --
+    name : varchar
+    email : varchar <<unique>>
+    password_hash : varchar
+    created_at : timestamp
+  }
+
+  entity "House" as house {
+    * id : UUID <<PK>>
+    --
+    owner_user_id : UUID <<FK>>
+    name : varchar
+    address : varchar
+    created_at : timestamp
+  }
+}
+
+package "Device Management Service" {
+  entity "DeviceType" as deviceType {
+    * id : UUID <<PK>>
+    --
+    name : varchar
+    category : varchar
+    unit : varchar
+  }
+
+  entity "Device" as device {
+    * id : UUID <<PK>>
+    --
+    type_id : UUID <<FK>>
+    house_id : UUID <<FK>>
+    serial_number : varchar <<unique>>
+    name : varchar
+    location : varchar
+    status : varchar
+    created_at : timestamp
+  }
+
+  entity "Module" as module {
+    * id : UUID <<PK>>
+    --
+    device_id : UUID <<FK>>
+    module_type : varchar
+    name : varchar
+    status : varchar
+  }
+}
+
+package "Temperature Monitoring Service" {
+  entity "TelemetryData" as telemetry {
+    * id : UUID <<PK>>
+    --
+    device_id : UUID <<FK>>
+    house_id : UUID
+    value : numeric
+    unit : varchar
+    recorded_at : timestamp
+  }
+}
+
+package "Heating Control Service" {
+  entity "HeatingProfile" as heatingProfile {
+    * house_id : UUID <<PK, FK>>
+    --
+    mode : varchar
+    target_temperature : numeric
+    current_state : varchar
+    updated_at : timestamp
+  }
+
+  entity "HeatingCommand" as heatingCommand {
+    * id : UUID <<PK>>
+    --
+    house_id : UUID <<FK>>
+    action : varchar
+    source : varchar
+    issued_at : timestamp
+    confirmed : boolean
+  }
+}
+
+package "Notification Service" {
+  entity "NotificationSetting" as notifSetting {
+    * id : UUID <<PK>>
+    --
+    user_id : UUID <<FK>>
+    house_id : UUID <<FK, nullable>>
+    channel : varchar
+    event_type : varchar
+    enabled : boolean
+  }
+
+  entity "NotificationLog" as notifLog {
+    * id : UUID <<PK>>
+    --
+    user_id : UUID <<FK>>
+    house_id : UUID
+    event_type : varchar
+    message : text
+    sent_at : timestamp
+    status : varchar
+  }
+}
+
+user ||--o{ house : "владеет\n(1 пользователь -> N домов)"
+house ||--o{ device : "содержит\n(1 дом -> N устройств)"
+deviceType ||--o{ device : "определяет тип\n(1 тип -> N устройств)"
+device ||--o{ module : "состоит из\n(1 устройство -> N модулей)"
+device ||--o{ telemetry : "генерирует\n(1 устройство -> N телеметрии)"
+house ||--|| heatingProfile : "имеет профиль отопления\n(1 -> 1)"
+house ||--o{ heatingCommand : "история команд\n(1 дом -> N команд)"
+user ||--o{ notifSetting : "настраивает\n(1 -> N)"
+house ||--o{ notifSetting : "уточняет для дома\n(0..1 -> N)"
+user ||--o{ notifLog : "получает\n(1 -> N)"
+
+@enduml

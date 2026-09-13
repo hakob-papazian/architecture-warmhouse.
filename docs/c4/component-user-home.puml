@@ -1,0 +1,33 @@
+@startuml Component_UserHome
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма компонентов — User & Home Service
+
+Container(gateway, "API Gateway", "REST")
+Container(deviceSvc, "Device Management Service", "REST", "Проверяет принадлежность дома пользователю")
+ContainerDb(userDb, "User & Home DB", "PostgreSQL")
+
+Container_Boundary(userSvc, "User & Home Service") {
+  Component(api, "API Controller", "REST controller", "Эндпоинты регистрации, логина, управления домами")
+  Component(authHandler, "Auth Handler", "application service", "Проверяет пароль, выпускает и валидирует JWT")
+  Component(homeManager, "Home Manager", "domain service", "CRUD домов, привязка пользователя к дому")
+  Component(accessChecker, "Access Checker", "domain service", "Проверяет, принадлежит ли дом/устройство пользователю")
+  Component(repository, "User & Home Repository", "EF Core / Data Access", "Доступ к таблицам users, homes, home_members")
+}
+
+Rel(gateway, api, "Логин, CRUD пользователей/домов, проверка доступа", "REST / JSON")
+Rel(deviceSvc, api, "Проверка принадлежности дома", "REST / JSON")
+
+Rel(api, authHandler, "Делегирует аутентификацию")
+Rel(api, homeManager, "Делегирует операции с домами")
+Rel(api, accessChecker, "Делегирует проверку доступа")
+
+Rel(authHandler, repository, "Читает учётные данные")
+Rel(homeManager, repository, "Читает/пишет дома")
+Rel(accessChecker, repository, "Читает членство")
+
+Rel(repository, userDb, "SQL", "SQL / TCP")
+
+@enduml

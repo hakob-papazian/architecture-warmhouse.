@@ -192,3 +192,11 @@ build/
 
 tmp/
 task-*
+
+### .NET ###
+bin/
+obj/
+*.user
+[Ll]og/
+[Ll]ogs/
+.vs/

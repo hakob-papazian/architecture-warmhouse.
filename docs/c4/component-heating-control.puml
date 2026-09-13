@@ -1,0 +1,36 @@
+@startuml Component_HeatingControl
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма компонентов — Heating Control Service
+
+Container(gateway, "API Gateway", "REST")
+ContainerQueue(broker, "Message Broker", "RabbitMQ")
+ContainerDb(heatingDb, "Heating DB", "PostgreSQL")
+System_Ext(heatingEquip, "Оборудование отопления", "Котёл/контроллер")
+
+Container_Boundary(heatingSvc, "Heating Control Service") {
+  Component(api, "API", "REST controller", "Просмотр состояния, ручное включение/выключение")
+  Component(automationHandler, "Automation Handler", "event consumer", "Подписан на TemperatureUpdated, решает о необходимости включить/выключить отопление")
+  Component(commandDispatcher, "Heating Command Dispatcher", "domain service", "Отправляет команду на оборудование и обрабатывает подтверждение")
+  Component(eventPublisher, "Event Publisher", "messaging", "Публикует HeatingStateChanged в брокер")
+  Component(repository, "Heating Repository", "EF Core / Data Access", "Состояние отопления и история команд по дому")
+}
+
+Rel(gateway, api, "Ручное управление отоплением", "REST / JSON")
+Rel(api, commandDispatcher, "Команда пользователя (вкл/выкл)")
+
+Rel(broker, automationHandler, "TemperatureUpdated", "AMQP")
+Rel(automationHandler, repository, "Читает целевую температуру и текущее состояние")
+Rel(automationHandler, commandDispatcher, "Инициирует команду при необходимости")
+
+Rel(commandDispatcher, heatingEquip, "Команда вкл/выкл", "HTTP")
+Rel(heatingEquip, commandDispatcher, "Подтверждение", "HTTP")
+Rel(commandDispatcher, repository, "Сохраняет новое состояние")
+Rel(commandDispatcher, eventPublisher, "Инициирует публикацию")
+Rel(eventPublisher, broker, "HeatingStateChanged", "AMQP")
+
+Rel(repository, heatingDb, "SQL", "SQL / TCP")
+
+@enduml

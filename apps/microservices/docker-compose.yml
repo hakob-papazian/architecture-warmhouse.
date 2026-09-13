@@ -1,0 +1,181 @@
+x-jwt-signing-key: &jwt-signing-key "dev-only-signing-key-change-me-please-32chars-min"
+
+x-rabbitmq-env: &rabbitmq-env
+  RABBITMQ_HOST: rabbitmq
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_USER: guest
+  RABBITMQ_PASSWORD: guest
+  RABBITMQ_EXCHANGE: smarthome.events
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: microservices-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - microservices_postgres_data:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [microservices-network]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: microservices-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks: [microservices-network]
+
+  # Reuses the exact Task 5 temperature-api project as this stack's sensor
+  # simulator, so the two stacks don't share a container but never diverge
+  # in behavior either.
+  temperature-sensors-api:
+    build:
+      context: ../temperature-api-dotnet
+      dockerfile: Dockerfile
+    container_name: microservices-temperature-sensors-api
+    environment:
+      PORT: "8081"
+    ports:
+      - "8091:8081"
+    restart: unless-stopped
+    networks: [microservices-network]
+
+  user-home-service:
+    build:
+      context: .
+      dockerfile: UserHomeService/Dockerfile
+    container_name: microservices-user-home-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/userhome
+      JWT_SIGNING_KEY: *jwt-signing-key
+    ports:
+      - "8092:8080"
+    restart: unless-stopped
+    networks: [microservices-network]
+
+  device-management-service:
+    build:
+      context: .
+      dockerfile: DeviceManagementService/Dockerfile
+    container_name: microservices-device-management-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      user-home-service:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/devicemanagement
+      USER_HOME_SERVICE_URL: http://user-home-service:8080
+      JWT_SIGNING_KEY: *jwt-signing-key
+    ports:
+      - "8093:8080"
+    restart: unless-stopped
+    networks: [microservices-network]
+
+  temperature-monitoring-service:
+    build:
+      context: .
+      dockerfile: TemperatureMonitoringService/Dockerfile
+    container_name: microservices-temperature-monitoring-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      temperature-sensors-api:
+        condition: service_started
+    environment:
+      <<: *rabbitmq-env
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/temperaturemonitoring
+      TEMPERATURE_SENSORS_API_URL: http://temperature-sensors-api:8081
+      JWT_SIGNING_KEY: *jwt-signing-key
+    ports:
+      - "8094:8080"
+    restart: unless-stopped
+    networks: [microservices-network]
+
+  heating-control-service:
+    build:
+      context: .
+      dockerfile: HeatingControlService/Dockerfile
+    container_name: microservices-heating-control-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-home-service:
+        condition: service_started
+    environment:
+      <<: *rabbitmq-env
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/heatingcontrol
+      USER_HOME_SERVICE_URL: http://user-home-service:8080
+      JWT_SIGNING_KEY: *jwt-signing-key
+    ports:
+      - "8095:8080"
+    restart: unless-stopped
+    networks: [microservices-network]
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: NotificationService/Dockerfile
+    container_name: microservices-notification-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-home-service:
+        condition: service_started
+    environment:
+      <<: *rabbitmq-env
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/notification
+      USER_HOME_SERVICE_URL: http://user-home-service:8080
+      JWT_SIGNING_KEY: *jwt-signing-key
+    ports:
+      - "8096:8080"
+    restart: unless-stopped
+    networks: [microservices-network]
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ApiGateway/Dockerfile
+    container_name: microservices-api-gateway
+    depends_on:
+      - user-home-service
+      - device-management-service
+      - temperature-monitoring-service
+      - heating-control-service
+      - notification-service
+    environment:
+      JWT_SIGNING_KEY: *jwt-signing-key
+    ports:
+      - "8090:8080"
+    restart: unless-stopped
+    networks: [microservices-network]
+
+volumes:
+  microservices_postgres_data:
+
+networks:
+  microservices-network:
+    driver: bridge

@@ -1,0 +1,40 @@
+@startuml Code_HeatingAutomationSequence
+title Код: автоматическое управление отоплением по показанию температуры
+
+participant "Temperature\nMonitoring Service" as Temp
+queue "Message Broker\n(RabbitMQ)" as Broker
+participant "Heating Control Service\n: Automation Handler" as Automation
+participant "Heating Control Service\n: Command Dispatcher" as Dispatcher
+database "Heating DB" as HeatingDb
+participant "Оборудование\nотопления" as Equip
+participant "Heating Control Service\n: Event Publisher" as Publisher
+participant "Notification Service" as Notif
+
+Temp -> Broker : publish TemperatureUpdated\n(homeId, sensorId, value)
+Broker -> Automation : deliver TemperatureUpdated
+
+Automation -> HeatingDb : получить целевую\nтемпературу и текущее\nсостояние отопления (homeId)
+HeatingDb --> Automation : targetTemperature, currentState
+
+alt value < targetTemperature AND currentState == Off
+    Automation -> Dispatcher : TurnOn(homeId)
+    Dispatcher -> Equip : POST /heating/on
+    Equip --> Dispatcher : 200 OK (ack)
+    Dispatcher -> HeatingDb : сохранить state = On
+    Dispatcher -> Publisher : уведомить об изменении
+    Publisher -> Broker : publish HeatingStateChanged\n(homeId, On)
+    Broker -> Notif : deliver HeatingStateChanged
+    Notif -> Notif : сформировать и отправить\nуведомление пользователю
+else value >= targetTemperature AND currentState == On
+    Automation -> Dispatcher : TurnOff(homeId)
+    Dispatcher -> Equip : POST /heating/off
+    Equip --> Dispatcher : 200 OK (ack)
+    Dispatcher -> HeatingDb : сохранить state = Off
+    Dispatcher -> Publisher : уведомить об изменении
+    Publisher -> Broker : publish HeatingStateChanged\n(homeId, Off)
+    Broker -> Notif : deliver HeatingStateChanged
+else состояние уже соответствует нужному
+    Automation -> Automation : ничего не делать
+end
+
+@enduml

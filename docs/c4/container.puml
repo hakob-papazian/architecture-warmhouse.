@@ -1,0 +1,62 @@
+@startuml Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма контейнеров — Smart Home (To-Be, микросервисы)
+
+Person(homeowner, "Пользователь", "Владелец дома")
+
+System_Boundary(smarthome, "Smart Home") {
+  Container(webApp, "Веб-приложение", "SPA", "Отображает температуру, позволяет управлять отоплением")
+  Container(gateway, "API Gateway", "REST / JSON", "Единая точка входа: маршрутизация, проверка JWT")
+
+  Container(userSvc, "User & Home Service", "REST", "Пользователи, дома, права доступа, выдача JWT")
+  ContainerDb(userDb, "User & Home DB", "PostgreSQL", "Пользователи, дома, членство")
+
+  Container(deviceSvc, "Device Management Service", "REST", "Реестр и конфигурация датчиков/устройств")
+  ContainerDb(deviceDb, "Device DB", "PostgreSQL", "Датчики и их метаданные")
+
+  Container(tempSvc, "Temperature Monitoring Service", "REST", "Приём и отдача показаний температуры")
+  ContainerDb(tempDb, "Temperature DB", "PostgreSQL", "История показаний температуры")
+
+  Container(heatingSvc, "Heating Control Service", "REST", "Состояние отопления, ручное и автоматическое управление")
+  ContainerDb(heatingDb, "Heating DB", "PostgreSQL", "Состояние и история команд отопления")
+
+  Container(notifSvc, "Notification Service", "REST + consumer", "Формирует и отправляет уведомления пользователям")
+  ContainerDb(notifDb, "Notification DB", "PostgreSQL", "Настройки и история уведомлений")
+
+  ContainerQueue(broker, "Message Broker", "RabbitMQ", "События TemperatureUpdated, HeatingStateChanged")
+}
+
+System_Ext(tempApi, "Temperature Sensors API", "Внешний источник показаний физических датчиков")
+System_Ext(heatingEquip, "Оборудование отопления", "Котёл/контроллер в доме пользователя")
+System_Ext(notifyChannel, "Email / Push провайдер", "Внешний канал доставки уведомлений")
+
+Rel(homeowner, webApp, "Использует", "HTTPS")
+Rel(webApp, gateway, "Запросы к API", "HTTPS / REST, JSON")
+
+Rel(gateway, userSvc, "Аутентификация, проверка доступа к дому", "REST / JSON")
+Rel(gateway, deviceSvc, "CRUD датчиков", "REST / JSON")
+Rel(gateway, tempSvc, "Текущая/историческая температура", "REST / JSON")
+Rel(gateway, heatingSvc, "Просмотр и ручное управление отоплением", "REST / JSON")
+
+Rel(userSvc, userDb, "Читает/пишет", "SQL / TCP")
+Rel(deviceSvc, deviceDb, "Читает/пишет", "SQL / TCP")
+Rel(tempSvc, tempDb, "Читает/пишет", "SQL / TCP")
+Rel(heatingSvc, heatingDb, "Читает/пишет", "SQL / TCP")
+Rel(notifSvc, notifDb, "Читает/пишет", "SQL / TCP")
+
+Rel(deviceSvc, userSvc, "Проверяет принадлежность дома пользователю", "REST / JSON")
+
+Rel(tempSvc, tempApi, "Запрашивает показания", "HTTPS / REST, JSON")
+Rel(tempSvc, broker, "Публикует TemperatureUpdated", "AMQP")
+
+Rel(heatingSvc, broker, "Подписан на TemperatureUpdated (автоматика)", "AMQP")
+Rel(heatingSvc, broker, "Публикует HeatingStateChanged", "AMQP")
+Rel(heatingSvc, heatingEquip, "Команды вкл/выкл, приём подтверждений", "HTTP")
+
+Rel(notifSvc, broker, "Подписан на TemperatureUpdated, HeatingStateChanged", "AMQP")
+Rel(notifSvc, notifyChannel, "Отправляет уведомление", "HTTPS / SMTP")
+
+@enduml

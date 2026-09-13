@@ -1,0 +1,31 @@
+@startuml Component_ApiGateway
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Диаграмма компонентов — API Gateway
+
+Container(webApp, "Веб-приложение", "SPA")
+Container(userSvc, "User & Home Service", "REST")
+Container(deviceSvc, "Device Management Service", "REST")
+Container(tempSvc, "Temperature Monitoring Service", "REST")
+Container(heatingSvc, "Heating Control Service", "REST")
+
+Container_Boundary(gateway, "API Gateway") {
+  Component(router, "Router", "Reverse proxy / route matching", "Определяет, в какой сервис направить запрос по пути")
+  Component(authMw, "Auth Middleware", "JWT", "Проверяет JWT-токен, извлекает user_id")
+  Component(rateLimiter, "Rate Limiter", "middleware", "Ограничивает частоту запросов от клиента")
+  Component(requestLogger, "Request Logger", "middleware", "Логирует и трассирует запросы (correlation id)")
+}
+
+Rel(webApp, router, "HTTPS запрос", "REST / JSON")
+Rel(router, authMw, "Передаёт запрос")
+Rel(authMw, rateLimiter, "Передаёт запрос")
+Rel(rateLimiter, requestLogger, "Передаёт запрос")
+
+Rel(requestLogger, userSvc, "Проксирует", "REST / JSON")
+Rel(requestLogger, deviceSvc, "Проксирует", "REST / JSON")
+Rel(requestLogger, tempSvc, "Проксирует", "REST / JSON")
+Rel(requestLogger, heatingSvc, "Проксирует", "REST / JSON")
+
+@enduml

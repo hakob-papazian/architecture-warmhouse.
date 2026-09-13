@@ -1,0 +1,143 @@
+asyncapi: '2.6.0'
+id: 'urn:smarthome:heating-events'
+info:
+  title: Smart Home — Heating & Temperature Events
+  version: '1.0.0'
+  description: >
+    Асинхронные контракты событий, которыми обмениваются Temperature
+    Monitoring Service, Heating Control Service и Notification Service
+    через брокер сообщений RabbitMQ. Публикация показания температуры
+    может привести к автоматической команде на отопление и/или
+    уведомлению пользователя без синхронного ожидания ответа.
+  contact:
+    name: Smart Home Team
+  license:
+    name: MIT
+
+servers:
+  rabbitmq:
+    url: rabbitmq.smarthome.internal:5672
+    protocol: amqp
+    description: Внутренний брокер сообщений RabbitMQ
+
+defaultContentType: application/json
+
+channels:
+  smarthome.temperature.updated:
+    description: >
+      Публикуется Temperature Monitoring Service при получении нового
+      показания температуры от датчика.
+    publish:
+      summary: Temperature Monitoring Service публикует новое показание
+      operationId: publishTemperatureUpdated
+      message:
+        $ref: '#/components/messages/TemperatureUpdated'
+    subscribe:
+      summary: >
+        Heating Control Service (автоматика) и Notification Service
+        (оповещение об аномалиях) подписаны на событие
+      operationId: consumeTemperatureUpdated
+      message:
+        $ref: '#/components/messages/TemperatureUpdated'
+
+  smarthome.heating.state-changed:
+    description: >
+      Публикуется Heating Control Service при изменении состояния
+      отопления дома (вручную пользователем или автоматически).
+    publish:
+      summary: Heating Control Service публикует изменение состояния
+      operationId: publishHeatingStateChanged
+      message:
+        $ref: '#/components/messages/HeatingStateChanged'
+    subscribe:
+      summary: Notification Service подписан для рассылки уведомлений пользователю
+      operationId: consumeHeatingStateChanged
+      message:
+        $ref: '#/components/messages/HeatingStateChanged'
+
+components:
+  messages:
+    TemperatureUpdated:
+      name: TemperatureUpdated
+      title: Показание температуры обновлено
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TemperatureUpdatedPayload'
+      examples:
+        - name: living-room-reading
+          payload:
+            eventId: "8f14e45f-ceea-4a5f-9c1a-1234567890ab"
+            houseId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            deviceId: "9c858901-8a57-4791-81fe-4c455b099bc9"
+            value: 19.8
+            unit: "C"
+            recordedAt: "2026-09-13T10:14:55Z"
+
+    HeatingStateChanged:
+      name: HeatingStateChanged
+      title: Состояние отопления изменилось
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/HeatingStateChangedPayload'
+      examples:
+        - name: auto-turn-on
+          payload:
+            eventId: "1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed"
+            houseId: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            commandId: "b3b3f8b0-9f0a-4e9a-9c1a-1c2f3a4b5c6d"
+            previousState: "off"
+            currentState: "on"
+            source: "auto"
+            changedAt: "2026-09-13T10:15:02Z"
+
+  schemas:
+    TemperatureUpdatedPayload:
+      type: object
+      required: [eventId, houseId, deviceId, value, unit, recordedAt]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        houseId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        value:
+          type: number
+          format: float
+        unit:
+          type: string
+          example: "C"
+        recordedAt:
+          type: string
+          format: date-time
+
+    HeatingStateChangedPayload:
+      type: object
+      required: [eventId, houseId, previousState, currentState, source, changedAt]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        houseId:
+          type: string
+          format: uuid
+        commandId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Заполнено, если изменение вызвано конкретной HeatingCommand
+        previousState:
+          type: string
+          enum: [on, off]
+        currentState:
+          type: string
+          enum: [on, off]
+        source:
+          type: string
+          enum: [manual, auto]
+        changedAt:
+          type: string
+          format: date-time
