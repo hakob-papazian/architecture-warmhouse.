@@ -7,6 +7,7 @@ public class DeviceDbContext(DbContextOptions<DeviceDbContext> options) : DbCont
 {
     public DbSet<DeviceType> DeviceTypes => Set<DeviceType>();
     public DbSet<Device> Devices => Set<Device>();
+    public DbSet<Module> Modules => Set<Module>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -21,5 +22,14 @@ public class DeviceDbContext(DbContextOptions<DeviceDbContext> options) : DbCont
         });
 
         modelBuilder.Entity<DeviceType>().HasIndex(t => t.Name).IsUnique();
+
+        modelBuilder.Entity<Module>(entity =>
+        {
+            entity.HasIndex(m => m.DeviceId);
+            entity.HasOne(m => m.Device)
+                .WithMany()
+                .HasForeignKey(m => m.DeviceId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

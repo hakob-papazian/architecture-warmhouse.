@@ -12,3 +12,6 @@ public record DeviceResponse(
     string Location,
     string Status,
     DateTimeOffset CreatedAt);
+
+public record CreateModuleRequest(string ModuleType, string Name);
+public record ModuleResponse(Guid Id, Guid DeviceId, string ModuleType, string Name, string Status);

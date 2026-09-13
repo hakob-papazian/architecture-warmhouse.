@@ -61,6 +61,7 @@ package "Temperature Monitoring Service" {
     * id : UUID <<PK>>
     --
     device_id : UUID <<FK>>
+    house_id : UUID
     value : numeric
     unit : varchar
     recorded_at : timestamp
@@ -82,6 +83,7 @@ package "Heating Control Service" {
     --
     house_id : UUID <<FK>>
     action : varchar
+    source : varchar
     issued_at : timestamp
     confirmed : boolean
   }
@@ -102,6 +104,7 @@ package "Notification Service" {
     * id : UUID <<PK>>
     --
     user_id : UUID <<FK>>
+    house_id : UUID
     event_type : varchar
     message : text
     sent_at : timestamp

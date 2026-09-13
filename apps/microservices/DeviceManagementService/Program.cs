@@ -149,4 +149,39 @@ app.MapDelete("/devices/{id:guid}", async (Guid id, DeviceDbContext db, Cancella
     return Results.Ok(new { message = "device deleted" });
 }).RequireAuthorization();
 
+static ModuleResponse ToModuleResponse(Module m) => new(m.Id, m.DeviceId, m.ModuleType, m.Name, m.Status);
+
+app.MapGet("/devices/{deviceId:guid}/modules", async (Guid deviceId, DeviceDbContext db, CancellationToken ct) =>
+{
+    var modules = await db.Modules.Where(m => m.DeviceId == deviceId).ToListAsync(ct);
+    return Results.Ok(modules.Select(ToModuleResponse));
+}).RequireAuthorization();
+
+app.MapPost("/devices/{deviceId:guid}/modules", async (Guid deviceId, CreateModuleRequest req, DeviceDbContext db, CancellationToken ct) =>
+{
+    if (!await db.Devices.AnyAsync(d => d.Id == deviceId, ct))
+    {
+        return Results.NotFound(new { error = "device not found" });
+    }
+
+    var module = new Module { DeviceId = deviceId, ModuleType = req.ModuleType, Name = req.Name };
+    db.Modules.Add(module);
+    await db.SaveChangesAsync(ct);
+
+    return Results.Created($"/devices/{deviceId}/modules/{module.Id}", ToModuleResponse(module));
+}).RequireAuthorization();
+
+app.MapDelete("/devices/{deviceId:guid}/modules/{moduleId:guid}", async (Guid deviceId, Guid moduleId, DeviceDbContext db, CancellationToken ct) =>
+{
+    var module = await db.Modules.SingleOrDefaultAsync(m => m.Id == moduleId && m.DeviceId == deviceId, ct);
+    if (module is null)
+    {
+        return Results.NotFound(new { error = "module not found" });
+    }
+
+    db.Modules.Remove(module);
+    await db.SaveChangesAsync(ct);
+    return Results.Ok(new { message = "module deleted" });
+}).RequireAuthorization();
+
 app.Run();
