@@ -172,6 +172,8 @@
 
 Для каждого эндпойнта в спецификации описаны схема запроса/ответа, коды `200/201/400/404/409/502/500` и примеры (`examples`) — подробности см. в самом файле.
 
+> Сверено с реальной реализацией (`apps/microservices/HeatingControlService`, см. «Дополнительно»): изначально сервис создавал профиль отопления для любого `houseId` без проверки, что дом существует, то есть 404 из спецификации никогда бы не возвращался. Добавлена проверка через внутренний эндпоинт User & Home Service (`HouseDirectoryClient`) — теперь код и контракт согласованы.
+
 **Асинхронные события — AsyncAPI 2.6.** Исходник: [`docs/api/heating-events-asyncapi.yaml`](docs/api/heating-events-asyncapi.yaml) (провалидирован `@asyncapi/cli validate`; открывается в AsyncAPI Studio). Описаны 2 канала RabbitMQ:
 
 | Канал | Publisher | Subscriber(s) | Сообщение |
@@ -283,6 +285,7 @@ docker compose up --build
 - ✅ Все 7 проектов собираются вместе (`dotnet build` на решении).
 - ✅ `dotnet test` — 5/5 тестов домена автоматики отопления (`HeatingProfile.DecideAutoAction`) проходят.
 - ✅ `docker compose config` — синтаксис и итоговая конфигурация compose-файла корректны.
+- ✅ Heating Control Service сверен построчно с `docs/api/heating-control-openapi.yaml` и `docs/api/heating-events-asyncapi.yaml` — найденное расхождение (отсутствующая проверка существования дома, из-за которой 404 из спецификации не мог случиться) устранено.
 - ❌ Живой прогон `docker compose up` в этой сессии не выполнен. Причина найдена: на этой машине не установлен WSL2 (`wsl --status` → «The Windows Subsystem for Linux is not installed»), без которого движок Docker Desktop на Windows не поднимается вообще (отсюда стабильный `500 Internal Server Error` на всех попытках). Исправление — `wsl --install` и перезагрузка; это системное изменение, поэтому оно не выполнялось без вашего решения.
 
 ## Осознанные упрощения относительно диаграмм Задания 2

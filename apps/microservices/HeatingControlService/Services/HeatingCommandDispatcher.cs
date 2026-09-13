@@ -6,7 +6,7 @@ using Smarthome.Shared.Messaging;
 
 namespace HeatingControlService.Services;
 
-public enum DispatchOutcome { Applied, Conflict, EquipmentUnreachable }
+public enum DispatchOutcome { Applied, Conflict, EquipmentUnreachable, HouseNotFound }
 
 // The "Heating Command Dispatcher" component: applies a wanted heating state,
 // talks to the equipment, persists the result and publishes HeatingStateChanged
@@ -15,14 +15,23 @@ public enum DispatchOutcome { Applied, Conflict, EquipmentUnreachable }
 public class HeatingCommandDispatcher(
     HeatingDbContext db,
     IHeatingEquipmentClient equipmentClient,
+    HouseDirectoryClient houseDirectory,
     IEventPublisher eventPublisher,
     ILogger<HeatingCommandDispatcher> logger)
 {
-    public async Task<HeatingProfile> GetOrCreateProfileAsync(Guid houseId, CancellationToken ct)
+    // Returns null when houseId doesn't correspond to a real house (backs the
+    // 404 responses in the OpenAPI spec). Only checks with User & Home Service
+    // the first time a house is seen - once a profile exists, it's trusted.
+    public async Task<HeatingProfile?> GetOrCreateProfileAsync(Guid houseId, CancellationToken ct)
     {
         var profile = await db.Profiles.FindAsync([houseId], ct);
         if (profile is null)
         {
+            if (!await houseDirectory.HouseExistsAsync(houseId, ct))
+            {
+                return null;
+            }
+
             profile = new HeatingProfile { HouseId = houseId };
             db.Profiles.Add(profile);
             await db.SaveChangesAsync(ct);
@@ -35,6 +44,10 @@ public class HeatingCommandDispatcher(
         Guid houseId, HeatingState action, CommandSource source, CancellationToken ct)
     {
         var profile = await GetOrCreateProfileAsync(houseId, ct);
+        if (profile is null)
+        {
+            return (DispatchOutcome.HouseNotFound, null);
+        }
 
         if (source == CommandSource.Manual && profile.Mode == HeatingMode.Auto)
         {

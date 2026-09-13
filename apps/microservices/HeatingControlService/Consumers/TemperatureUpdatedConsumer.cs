@@ -23,6 +23,13 @@ public class TemperatureUpdatedConsumer(
     {
         var dispatcher = scopedServices.GetRequiredService<HeatingCommandDispatcher>();
         var profile = await dispatcher.GetOrCreateProfileAsync(@event.HouseId, ct);
+        if (profile is null)
+        {
+            // Shouldn't happen in practice - a TemperatureUpdated event only ever
+            // carries a houseId that came from a real, already-registered watch.
+            logger.LogWarning("Received TemperatureUpdated for unknown house {HouseId}", @event.HouseId);
+            return;
+        }
 
         var wantedAction = profile.DecideAutoAction(@event.Value);
         if (wantedAction is null)

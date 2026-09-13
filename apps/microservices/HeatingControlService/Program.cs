@@ -18,6 +18,9 @@ var databaseUrl = GetEnv("DATABASE_URL", "postgres://postgres:postgres@localhost
 var connectionString = Smarthome.Shared.Data.PostgresConnectionStringBuilder.FromUrl(databaseUrl);
 builder.Services.AddDbContext<HeatingDbContext>(options => options.UseNpgsql(connectionString));
 
+var userHomeServiceUrl = GetEnv("USER_HOME_SERVICE_URL", "http://user-home-service:8080");
+builder.Services.AddHttpClient<HouseDirectoryClient>(client => client.BaseAddress = new Uri(userHomeServiceUrl));
+
 builder.Services.AddScoped<IHeatingEquipmentClient, SimulatedHeatingEquipmentClient>();
 builder.Services.AddScoped<HeatingCommandDispatcher>();
 
@@ -66,10 +69,12 @@ app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
+static IResult HouseNotFoundResult(Guid houseId) => Results.NotFound(new { error = "not_found", message = $"House {houseId} not found" });
+
 app.MapGet("/houses/{houseId:guid}/heating", async (Guid houseId, HeatingCommandDispatcher dispatcher, CancellationToken ct) =>
 {
     var profile = await dispatcher.GetOrCreateProfileAsync(houseId, ct);
-    return Results.Ok(HeatingProfileResponse.From(profile));
+    return profile is null ? HouseNotFoundResult(houseId) : Results.Ok(HeatingProfileResponse.From(profile));
 }).RequireAuthorization();
 
 app.MapPatch("/houses/{houseId:guid}/heating/target-temperature", async (
@@ -81,6 +86,11 @@ app.MapPatch("/houses/{houseId:guid}/heating/target-temperature", async (
     }
 
     var profile = await dispatcher.GetOrCreateProfileAsync(houseId, ct);
+    if (profile is null)
+    {
+        return HouseNotFoundResult(houseId);
+    }
+
     profile.TargetTemperature = req.TargetTemperature;
     profile.UpdatedAt = DateTimeOffset.UtcNow;
     await db.SaveChangesAsync(ct);
@@ -97,6 +107,11 @@ app.MapPatch("/houses/{houseId:guid}/heating/mode", async (
     }
 
     var profile = await dispatcher.GetOrCreateProfileAsync(houseId, ct);
+    if (profile is null)
+    {
+        return HouseNotFoundResult(houseId);
+    }
+
     profile.Mode = mode;
     profile.UpdatedAt = DateTimeOffset.UtcNow;
     await db.SaveChangesAsync(ct);
@@ -123,12 +138,19 @@ app.MapPost("/houses/{houseId:guid}/heating/commands", async (
         DispatchOutcome.EquipmentUnreachable => Results.Json(
             new { error = "equipment_unreachable", message = "Heating equipment did not acknowledge the command" },
             statusCode: StatusCodes.Status502BadGateway),
+        DispatchOutcome.HouseNotFound => HouseNotFoundResult(houseId),
         _ => Results.StatusCode(StatusCodes.Status500InternalServerError),
     };
 }).RequireAuthorization();
 
-app.MapGet("/houses/{houseId:guid}/heating/commands", async (Guid houseId, int? limit, HeatingDbContext db, CancellationToken ct) =>
+app.MapGet("/houses/{houseId:guid}/heating/commands", async (
+    Guid houseId, int? limit, HeatingDbContext db, HouseDirectoryClient houseDirectory, CancellationToken ct) =>
 {
+    if (!await houseDirectory.HouseExistsAsync(houseId, ct))
+    {
+        return HouseNotFoundResult(houseId);
+    }
+
     var commands = await db.Commands
         .Where(c => c.HouseId == houseId)
         .OrderByDescending(c => c.IssuedAt)

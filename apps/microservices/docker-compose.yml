@@ -121,9 +121,12 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      user-home-service:
+        condition: service_started
     environment:
       <<: *rabbitmq-env
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/heatingcontrol
+      USER_HOME_SERVICE_URL: http://user-home-service:8080
       JWT_SIGNING_KEY: *jwt-signing-key
     ports:
       - "8095:8080"
